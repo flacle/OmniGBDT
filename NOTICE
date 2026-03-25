@@ -1,0 +1,9 @@
+OmniGBDT is a fork of the original GBDT-MO project by Zhendong Zhang and
+Cheolkon Jung.
+
+This repository includes packaging, distribution, documentation, testing, and
+maintenance changes for the OmniGBDT fork, while preserving substantial parts
+of the original training and inference implementation from GBDT-MO.
+
+The original upstream MIT license notice from Zhendong Zhang is preserved in
+LICENSE.upstream.

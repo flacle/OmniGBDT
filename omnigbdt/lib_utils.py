@@ -1,0 +1,240 @@
+import ctypes
+from ctypes import c_bool, c_char_p, c_double, c_int, c_void_p
+from enum import IntEnum
+from numbers import Integral
+import os
+from pathlib import Path
+
+import numpy as np
+import numpy.ctypeslib as npct
+
+array_1d_double = npct.ndpointer(dtype=np.double, ndim=1, flags="CONTIGUOUS")
+array_2d_double = npct.ndpointer(dtype=np.double, ndim=2, flags="CONTIGUOUS")
+array_1d_int = npct.ndpointer(dtype=np.int32, ndim=1, flags="CONTIGUOUS")
+array_2d_int = npct.ndpointer(dtype=np.int32, ndim=2, flags="CONTIGUOUS")
+array_1d_uint16 = npct.ndpointer(dtype=np.uint16, ndim=1, flags="CONTIGUOUS")
+array_2d_uint16 = npct.ndpointer(dtype=np.uint16, ndim=2, flags="CONTIGUOUS")
+
+_LIBRARY_BASENAME = "_omnigbdt"
+_LOADED_LIBRARIES = {}
+_DLL_DIRECTORIES = []
+
+
+class Verbosity(IntEnum):
+    SILENT = 0
+    SUMMARY = 1
+    FULL = 2
+
+
+def _normalize_verbosity(user_params=None, params=None):
+    user_params = {} if user_params is None else user_params
+    params = {} if params is None else params
+
+    value = user_params["verbosity"] if "verbosity" in user_params else params.get("verbose", True)
+
+    if isinstance(value, str):
+        normalized = value.strip().upper()
+        mapping = {
+            "SILENT": Verbosity.SILENT,
+            "SUMMARY": Verbosity.SUMMARY,
+            "FULL": Verbosity.FULL,
+        }
+        if normalized not in mapping:
+            raise ValueError(
+                "verbosity must be one of 'silent', 'summary', 'full', "
+                "a Verbosity value, or an integer in {0, 1, 2}."
+            )
+        return int(mapping[normalized])
+
+    if isinstance(value, bool):
+        return int(Verbosity.FULL if value else Verbosity.SILENT)
+
+    if isinstance(value, Verbosity):
+        return int(value)
+
+    if isinstance(value, Integral) and int(value) in (0, 1, 2):
+        return int(value)
+
+    raise ValueError(
+        "verbosity must be one of Verbosity.SILENT, Verbosity.SUMMARY, "
+        "Verbosity.FULL, or an integer in {0, 1, 2}."
+    )
+
+
+def _candidate_library_names():
+    if os.name == "nt":
+        return [f"{_LIBRARY_BASENAME}.dll"]
+    if os.name == "posix" and os.uname().sysname == "Darwin":
+        return [f"{_LIBRARY_BASENAME}.dylib", f"{_LIBRARY_BASENAME}.so"]
+    return [f"{_LIBRARY_BASENAME}.so"]
+
+
+def _find_library_in_directory(directory):
+    for name in _candidate_library_names():
+        candidate = directory / name
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
+def _resolve_packaged_library_path():
+    package_dir = Path(__file__).resolve().parent
+    search_roots = [package_dir, package_dir.parent]
+    for root in search_roots:
+        direct_match = _find_library_in_directory(root)
+        if direct_match is not None:
+            return direct_match
+
+    for build_dir_name in ("build", "_skbuild"):
+        build_dir = package_dir.parent / build_dir_name
+        if build_dir.is_dir():
+            for name in _candidate_library_names():
+                matches = sorted(build_dir.rglob(name))
+                if matches:
+                    return matches[0].resolve()
+
+    raise FileNotFoundError(
+        "Could not find the packaged OmniGBDT native library. "
+        "Install the package with pip or pass an explicit library path to load_lib()."
+    )
+
+
+def _resolve_library_path(path=None):
+    if path is None:
+        return _resolve_packaged_library_path()
+
+    candidate = Path(path)
+    if candidate.is_file():
+        return candidate.resolve()
+    if candidate.is_dir():
+        library_path = _find_library_in_directory(candidate)
+        if library_path is not None:
+            return library_path
+
+    raise FileNotFoundError(f"Could not find an OmniGBDT native library at {path!r}.")
+
+
+def _configure_library(lib):
+    lib.SetData.argtypes = [c_void_p, array_2d_uint16, array_2d_double, array_2d_double, c_int, c_bool]
+    lib.SetBin.argtypes = [c_void_p, array_1d_uint16, array_1d_double]
+    lib.SetGH.argtypes = [c_void_p, array_2d_double, array_2d_double]
+    lib.SetData.restype = None
+    lib.SetBin.restype = None
+    lib.SetGH.restype = None
+
+    lib.Boost.argtypes = [c_void_p]
+    lib.Train.argtypes = [c_void_p, c_int]
+    lib.Dump.argtypes = [c_void_p, c_char_p]
+    lib.Load.argtypes = [c_void_p, c_char_p]
+    lib.Boost.restype = None
+    lib.Train.restype = None
+    lib.Dump.restype = None
+    lib.Load.restype = None
+
+    lib.SetLabelDouble.restype = None
+    lib.SetLabelInt.restype = None
+    lib.Predict.restype = None
+
+    lib.MultiNew.argtypes = [
+        c_int,
+        c_int,
+        c_int,
+        c_char_p,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_double,
+        c_double,
+        c_double,
+        c_double,
+        c_double,
+        c_int,
+        c_bool,
+        c_int,
+        c_int,
+    ]
+    lib.MultiNew.restype = c_void_p
+
+    lib.SingleNew.argtypes = [
+        c_int,
+        c_char_p,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_double,
+        c_double,
+        c_double,
+        c_double,
+        c_double,
+        c_int,
+        c_int,
+        c_int,
+    ]
+    lib.SingleNew.restype = c_void_p
+
+    lib.TrainMulti.argtypes = [c_void_p, c_int, c_int]
+    lib.PredictMulti.argtypes = [c_void_p, array_2d_double, array_1d_double, c_int, c_int, c_int]
+    lib.Reset.argtypes = [c_void_p]
+    lib.SingleFree.argtypes = [c_void_p]
+    lib.MultiFree.argtypes = [c_void_p]
+    lib.TrainMulti.restype = None
+    lib.PredictMulti.restype = None
+    lib.Reset.restype = None
+    lib.SingleFree.restype = None
+    lib.MultiFree.restype = None
+
+
+def load_lib(path=None):
+    library_path = _resolve_library_path(path)
+    cache_key = str(library_path)
+    if cache_key in _LOADED_LIBRARIES:
+        return _LOADED_LIBRARIES[cache_key]
+
+    if os.name == "nt" and hasattr(os, "add_dll_directory"):
+        _DLL_DIRECTORIES.append(os.add_dll_directory(str(library_path.parent)))
+
+    lib = ctypes.CDLL(str(library_path))
+    _configure_library(lib)
+    _LOADED_LIBRARIES[cache_key] = lib
+    return lib
+
+
+def default_params():
+    return {
+        "max_depth": 4,
+        "max_leaves": 32,
+        "max_bins": 32,
+        "topk": 0,
+        "seed": 0,
+        "num_threads": 2,
+        "min_samples": 20,
+        "subsample": 1.0,
+        "lr": 0.2,
+        "base_score": 0.0,
+        "reg_l1": 0.0,
+        "reg_l2": 1.0,
+        "gamma": 1e-3,
+        "loss": b"mse",
+        "early_stop": 0,
+        "one_side": True,
+        "verbosity": int(Verbosity.FULL),
+        "verbose": True,
+        "hist_cache": 16,
+    }
+
+
+__all__ = [
+    "array_1d_double",
+    "array_2d_double",
+    "array_1d_int",
+    "array_2d_int",
+    "array_1d_uint16",
+    "array_2d_uint16",
+    "default_params",
+    "load_lib",
+    "Verbosity",
+]
