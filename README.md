@@ -28,7 +28,7 @@ OmniGBDT targets wheel-based installs on:
 - Linux x86_64
 - Windows x86_64
 - macOS arm64 (14+)
-- macOS x86_64
+- macOS x86_64 (14+)
 
 The GitHub Actions workflow builds these wheels in CI and publishes them on version tags matching `v*`.
 
