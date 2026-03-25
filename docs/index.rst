@@ -113,7 +113,7 @@ The wheel-first release target for this repository is:
 - Linux x86_64
 - Windows x86_64
 - macOS x86_64
-- macOS arm64
+- macOS arm64 (14+)
 
 Use OmniGBDT inside an existing uv project
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
