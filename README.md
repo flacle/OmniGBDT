@@ -1,6 +1,6 @@
 # OmniGBDT
 
-OmniGBDT packages the original [GBDT-MO](https://github.com/zzd1992/GBDTMO) algorithm as a regular Python library. It keeps the native C++ training core and adds modern Python packaging, cross-platform wheels, and optional sklearn-compatible wrappers.
+OmniGBDT packages the original [GBDT-MO](https://github.com/zzd1992/GBDTMO) algorithm as a regular Python library. It keeps the native C++ training core and adds modern Python packaging, cross-platform wheels, public custom-objective hooks, and optional sklearn-compatible wrappers.
 
 The main public classes are `MultiOutputGBDT` and `SingleOutputGBDT`.
 
@@ -128,6 +128,60 @@ print("Prediction shape from MultiOutputGBDT:", multi.predict(X[:3]).shape)
 print("Prediction shape from stacked SingleOutputGBDT models:", single_preds[:3].shape)
 ```
 
+### Custom objectives
+
+You can supply gradients and Hessians from Python with an XGBoost-style callback:
+
+```python
+import numpy as np
+
+from omnigbdt import MultiOutputGBDT, Verbosity
+
+
+def mse_objective(preds, target):
+    return preds - target, np.ones_like(preds)
+
+
+def rmse_metric(preds, target):
+    return float(np.sqrt(np.mean((preds - target) ** 2)))
+
+
+rng = np.random.default_rng(0)
+X_train = rng.random((256, 4)).astype("float64")
+Y_train = rng.random((256, 3)).astype("float64")
+X_valid = rng.random((64, 4)).astype("float64")
+Y_valid = rng.random((64, 3)).astype("float64")
+
+booster = MultiOutputGBDT(
+    out_dim=Y_train.shape[1],
+    params={
+        "loss": b"mse",
+        "max_depth": 3,
+        "lr": 0.1,
+        "early_stop": 2,
+        "num_threads": 1,
+        "verbosity": Verbosity.FULL,
+    },
+)
+booster.set_data((X_train, Y_train), (X_valid, Y_valid))
+booster.train(
+    20,
+    objective=mse_objective,
+    eval_metric=rmse_metric,
+    maximize=False,
+)
+preds = booster.predict(X_valid)
+print(preds.shape)
+```
+
+Notes:
+
+- `SingleOutputGBDT.train(..., objective=...)` expects 1D `preds` and `target` arrays.
+- `MultiOutputGBDT.train(..., objective=...)` expects 2D arrays shaped `(n_samples, out_dim)`.
+- `loss` must still be a supported built-in native loss name such as `b"mse"` because the native booster validates it at construction time, but custom rounds use your Python callback instead of the built-in objective.
+- If `early_stop > 0` on the custom-objective path, you must also provide `eval_set`, `eval_metric`, and `maximize`.
+- The protected `_set_gh(...)` plus `boost()` workflow still exists as an advanced manual escape hatch.
+
 ### Permutation importance with sklearn
 
 Install the optional sklearn extra first:
@@ -190,6 +244,8 @@ print(f"Elapsed time: {elapsed_time:.3f} seconds")
 print(result.importances_mean)
 ```
 
+The sklearn-compatible wrappers also accept `objective=...`, `eval_metric=...`, and `maximize=...`, and forward them to the same custom-objective training path.
+
 ## Source and Development Installs
 
 ### Install from source
@@ -203,8 +259,6 @@ or with `uv`:
 ```bash
 uv add ./OmniGBDT
 ```
-
-That `uv add ./OmniGBDT` form is a local path dependency, so it builds from source on the current machine.
 
 On Windows, use either `uv add .\\OmniGBDT` or `uv add ./OmniGBDT`.
 Do not use `uv add OmniGBDT` without `./` or `.\\`, because that asks the package registry for a published package named `omnigbdt` instead of using the local folder.
@@ -254,9 +308,9 @@ omnigbdt = { path = "../OmniGBDT", editable = true }
 
 ### Windows source builds
 
-Local path installs such as `uv add ./OmniGBDT` and source installs such as `pip install .` compile the native C++ library during installation.
+Local installs (`uv add ./OmniGBDT` or `pip install .`) compile the native C++ library during installation.
 
-On Windows, install:
+So on Windows, you must install first:
 
 - Visual Studio Build Tools 2022 (or Visual Studio 2022)
 - the `Desktop development with C++` workload
@@ -271,22 +325,23 @@ CMAKE_CXX_COMPILER not set, after EnableLanguage
 
 then the package is being built from source but the MSVC toolchain is not available in the current shell.
 
-The most reliable fix is:
+In this case, try:
 
-1. Install Visual Studio Build Tools 2022 with the C++ workload.
-2. Reopen the terminal from `x64 Native Tools Command Prompt for VS 2022`.
+1. Installing Visual Studio Build Tools 2022 with the C++ workload.
+2. Reopening the terminal from `x64 Native Tools Command Prompt for VS 2022`.
 3. Rerun `uv add ./OmniGBDT` or `pip install .`.
 
 If the toolchain is already installed, also check that `CMAKE_GENERATOR` is not forcing `NMake Makefiles` in a shell where `nmake.exe` is unavailable.
 
 ## What OmniGBDT Adds
 
-Compared with the upstream repository, OmniGBDT:
+Compared with the upstream GBDTMO repository, OmniGBDT:
 
 - replaces the old `make.sh` and manual shared-library workflow with standard Python packaging
 - bundles the native library inside the Python package
 - keeps `load_lib(path=None)` for advanced or compatibility workflows
 - adds wheel automation for Linux, macOS, and Windows
+- adds public Python callback hooks for custom gradients, Hessians, metrics, and early stopping
 - adds optional sklearn-compatible wrappers so users can apply sklearn inspection tools such as permutation-based feature importance
 
 ### Core native-code deviations from upstream GBDT-MO
@@ -346,7 +401,7 @@ uv run --no-project --with-requirements docs/requirements.txt sphinx-build -W -n
 
 ### Build the native library directly
 
-If you only want to build the native library:
+To build the native library:
 
 ```bash
 cmake -S . -B build

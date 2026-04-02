@@ -24,6 +24,15 @@ void BoosterUtils::set_gh(double *x, double *y) {
     H = y;
 }
 
+void BoosterUtils::trim_trees(int num_trees) {
+    if (num_trees < 0) {
+        num_trees = 0;
+    }
+    if (num_trees < static_cast<int>(trees.size())) {
+        trees.resize(num_trees);
+    }
+}
+
 void BoosterUtils::set_data(uint16_t *x, double *y, double *z, int n, bool is_train) {
     if (is_train) {
         Train.num = n;

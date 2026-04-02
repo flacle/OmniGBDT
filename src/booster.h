@@ -28,6 +28,8 @@ public:
 
     void set_gh(double *, double *);
 
+    void trim_trees(int);
+
     void set_data(uint16_t *, double *, double *, int, bool);
 
     void set_label(double *, bool);

@@ -39,6 +39,10 @@ OMNIGBDT_EXPORT void Train(BoosterUtils *foo, int n) {
     return foo->train(n);
 }
 
+OMNIGBDT_EXPORT void TrimTrees(BoosterUtils *foo, int n) {
+    return foo->trim_trees(n);
+}
+
 OMNIGBDT_EXPORT void Predict(BoosterUtils *foo, double *features, double *preds, int n, int num_trees) {
     return foo->predict(features, preds, n, num_trees);
 }

@@ -162,7 +162,7 @@ Then render a dumped tree:
 Custom loss
 -----------
 
-``MultiOutputGBDT`` also supports a manual gradient/hessian workflow:
+``MultiOutputGBDT`` supports public callback-based custom objectives through ``train(..., objective=...)``:
 
 Continuing from the basic multi-output example above:
 
@@ -170,16 +170,46 @@ Continuing from the basic multi-output example above:
 
    import numpy as np
 
-   def mse_grad_hess(preds, target):
-       g = preds - target
-       h = np.ones_like(preds)
-       return g, h
+   def mse_objective(preds, target):
+       return preds - target, np.ones_like(preds)
 
-   g, h = mse_grad_hess(booster.preds_train.copy(), booster.label.copy())
+   def rmse_metric(preds, target):
+       return float(np.sqrt(np.mean((preds - target) ** 2)))
+
+   booster.train(
+       10,
+       objective=mse_objective,
+       eval_metric=rmse_metric,
+       maximize=False,
+   )
+
+This uses your Python callback to supply gradients and Hessians round by round.
+
+If you need manual control, the protected ``_set_gh(...)`` plus ``boost()`` workflow still exists as an advanced escape hatch:
+
+.. code-block:: python
+
+   g, h = mse_objective(booster.preds_train.copy(), booster.label.copy())
    booster._set_gh(g, h)
    booster.boost()
 
-This grows one additional tree using the gradients and Hessians you provide.
+For ``SingleOutputGBDT``, the custom-objective callback receives 1D arrays. For ``MultiOutputGBDT``, it receives 2D arrays shaped ``(n_samples, out_dim)``.
+
+The sklearn-compatible wrappers forward the same callback arguments:
+
+.. code-block:: python
+
+   from omnigbdt import MultiOutputGBDTRegressor
+
+   model = MultiOutputGBDTRegressor(
+       num_rounds=10,
+       objective=mse_objective,
+       eval_metric=rmse_metric,
+       maximize=False,
+       max_depth=3,
+       num_threads=1,
+   )
+   model.fit(X, Y)
 
 Permutation importance with sklearn
 -----------------------------------

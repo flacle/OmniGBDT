@@ -1,5 +1,5 @@
 import ctypes
-from ctypes import c_bool, c_char_p, c_double, c_int, c_void_p
+from ctypes import POINTER, c_bool, c_char_p, c_double, c_int, c_void_p
 from enum import IntEnum
 from numbers import Integral
 import os
@@ -115,19 +115,26 @@ def _resolve_library_path(path=None):
 
 
 def _configure_library(lib):
+    """Attach ctypes signatures to the loaded native library.
+
+    Args:
+        lib: Loaded ``ctypes.CDLL`` instance for OmniGBDT.
+    """
     lib.SetData.argtypes = [c_void_p, array_2d_uint16, array_2d_double, array_2d_double, c_int, c_bool]
     lib.SetBin.argtypes = [c_void_p, array_1d_uint16, array_1d_double]
-    lib.SetGH.argtypes = [c_void_p, array_2d_double, array_2d_double]
+    lib.SetGH.argtypes = [c_void_p, POINTER(c_double), POINTER(c_double)]
     lib.SetData.restype = None
     lib.SetBin.restype = None
     lib.SetGH.restype = None
 
     lib.Boost.argtypes = [c_void_p]
     lib.Train.argtypes = [c_void_p, c_int]
+    lib.TrimTrees.argtypes = [c_void_p, c_int]
     lib.Dump.argtypes = [c_void_p, c_char_p]
     lib.Load.argtypes = [c_void_p, c_char_p]
     lib.Boost.restype = None
     lib.Train.restype = None
+    lib.TrimTrees.restype = None
     lib.Dump.restype = None
     lib.Load.restype = None
 

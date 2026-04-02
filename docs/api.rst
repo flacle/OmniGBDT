@@ -36,9 +36,15 @@ MultiOutputGBDT
       - ``X`` must be a 2D ``float64`` array
       - ``y`` may be ``None`` or a 2D ``float64`` / ``int32`` array with one column per output
 
-   .. method:: train(num)
+   .. method:: train(num, objective=None, eval_metric=None, maximize=None)
 
       Train the model for ``num`` boosting rounds.
+
+      - when ``objective`` is omitted, OmniGBDT uses the built-in native loss from ``params["loss"]``
+      - when ``objective`` is provided, it must return ``(grad, hess)`` from the current prediction matrix and label matrix
+      - for ``MultiOutputGBDT``, those callback arrays are 2D with shape ``(n_samples, out_dim)``
+      - ``eval_metric`` may be used to report a scalar metric for the train and eval splits during custom-objective training
+      - if ``early_stop > 0`` on the custom-objective path, you must also provide ``eval_set``, ``eval_metric``, and ``maximize``
 
    .. method:: predict(x, num_trees=0)
 
@@ -61,7 +67,7 @@ MultiOutputGBDT
 
    .. method:: _set_gh(g, h)
 
-      Set gradient and hessian arrays for the next call to ``boost()``. This is intended for custom-loss workflows.
+      Set gradient and hessian arrays for the next call to ``boost()``. This is an advanced escape hatch for manual custom-loss workflows.
 
    .. method:: _set_label(x, is_train)
 
@@ -97,9 +103,15 @@ SingleOutputGBDT
       - ``X`` is a 2D ``float64`` array
       - ``y`` is typically a contiguous 1D ``float64`` or ``int32`` array
 
-   .. method:: train(num)
+   .. method:: train(num, objective=None, eval_metric=None, maximize=None)
 
       Train a single-output model for ``num`` boosting rounds.
+
+      - when ``objective`` is omitted, OmniGBDT uses the built-in native loss from ``params["loss"]``
+      - when ``objective`` is provided, it must return ``(grad, hess)`` from the current prediction vector and label vector
+      - for ``SingleOutputGBDT``, callback arrays are 1D with shape ``(n_samples,)``
+      - the custom-objective path is only supported for the normal ``out_dim == 1`` workflow
+      - if ``early_stop > 0`` on the custom-objective path, you must also provide ``eval_set``, ``eval_metric``, and ``maximize``
 
    .. method:: predict(x, num_trees=0)
 
@@ -140,6 +152,8 @@ SingleOutputGBDTRegressor
 
    It exposes ``fit(...)``, ``predict(...)``, and ``score(...)`` so you can use it with tools such as ``sklearn.inspection.permutation_importance``.
 
+   Its constructor also accepts ``objective=None``, ``eval_metric=None``, and ``maximize=None`` and forwards them to ``SingleOutputGBDT.train(...)``.
+
 MultiOutputGBDTRegressor
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -148,6 +162,8 @@ MultiOutputGBDTRegressor
    sklearn-compatible multi-output regressor wrapper around ``MultiOutputGBDT``.
 
    It exposes ``fit(...)``, ``predict(...)``, and ``score(...)`` for sklearn-style multi-output workflows.
+
+   Its constructor also accepts ``objective=None``, ``eval_metric=None``, and ``maximize=None`` and forwards them to ``MultiOutputGBDT.train(...)``.
 
 Utilities
 ---------

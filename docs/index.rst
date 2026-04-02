@@ -169,6 +169,7 @@ Compared with the upstream repository, OmniGBDT:
 - bundles the native library inside the Python package
 - keeps ``load_lib(path=None)`` for advanced or compatibility workflows
 - adds wheel automation for Linux, macOS, and Windows
+- adds public Python callback hooks for custom gradients, Hessians, metrics, and early stopping
 - adds optional sklearn-compatible wrappers so users can apply sklearn inspection tools such as permutation-based feature importance
 
 Project provenance

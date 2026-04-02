@@ -10,6 +10,7 @@ General
   - Supported values are ``b"mse"``, ``b"bce"``, ``b"ce"``, and ``b"ce_column"``
   - ``b"ce_column"`` is only relevant to legacy ``SingleOutputGBDT`` classification-style workflows
   - The Python API expects a byte string, for example ``b"mse"``
+  - when you train with ``objective=...``, the native booster still requires ``loss`` to be a supported built-in value at construction time, but custom rounds use your callback instead of the built-in objective
 
 - ``verbosity``: default = ``Verbosity.FULL`` (``2``), type = ``Verbosity`` or int
   - ``Verbosity.SILENT`` / ``0`` prints nothing from the native trainer
@@ -81,6 +82,27 @@ Learning
 - ``subsample``: default = ``1.0``, type = float
   - Present in the Python defaults for compatibility
   - The current native implementation does not actively use it
+
+Training call hooks
+-------------------
+
+The public callback hooks live on ``train(...)`` rather than inside the ``params`` dictionary:
+
+- ``train(num, objective=None, eval_metric=None, maximize=None)``
+  - available on ``SingleOutputGBDT`` and ``MultiOutputGBDT``
+  - ``objective(preds, y_true)`` must return ``(grad, hess)``
+  - ``eval_metric(preds, y_true)`` must return a scalar float
+  - ``maximize`` controls whether larger evaluation metric values are better
+
+Shape rules:
+
+- ``SingleOutputGBDT.train(..., objective=...)`` uses 1D prediction and label arrays shaped ``(n_samples,)``
+- ``MultiOutputGBDT.train(..., objective=...)`` uses 2D prediction and label arrays shaped ``(n_samples, out_dim)``
+
+Custom early stopping:
+
+- if ``early_stop > 0`` on the custom-objective path, you must also provide ``eval_set``, ``eval_metric``, and ``maximize``
+- the protected ``_set_gh(...)`` plus ``boost()`` workflow remains available for advanced manual control
 
 Model-specific notes
 --------------------

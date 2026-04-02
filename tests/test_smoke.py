@@ -8,6 +8,65 @@ from omnigbdt import MultiOutputGBDT, SingleOutputGBDT, Verbosity, load_lib
 from omnigbdt.lib_utils import _resolve_packaged_library_path
 
 
+def mse_objective(preds, target):
+    """Return MSE gradients and Hessians for callback-based training tests."""
+    return preds - target, np.ones_like(preds)
+
+
+def rmse_metric(preds, target):
+    """Return the root-mean-squared error for callback-based training tests."""
+    return float(np.sqrt(np.mean((preds - target) ** 2)))
+
+
+def invalid_single_shape_objective(preds, target):
+    """Return a deliberately invalid single-output gradient shape for tests."""
+    del target
+    return (
+        np.ones((len(preds), 2), dtype=np.float64),
+        np.ones((len(preds), 2), dtype=np.float64),
+    )
+
+
+def invalid_integer_objective(preds, target):
+    """Return deliberately invalid integer gradients and Hessians for tests."""
+    del target
+    return (
+        np.ones_like(preds, dtype=np.int32),
+        np.ones_like(preds, dtype=np.int32),
+    )
+
+
+class EvalMetricSequence:
+    """Emit a fixed evaluation metric sequence while keeping train metrics numeric."""
+
+    def __init__(self, values, eval_size):
+        """Store the evaluation-only metric sequence.
+
+        Args:
+            values: Metric values to emit for the evaluation split.
+            eval_size: Number of rows in the evaluation split.
+        """
+        self.values = list(values)
+        self.eval_size = eval_size
+        self.index = 0
+
+    def __call__(self, preds, target):
+        """Return the next configured eval metric or a real train RMSE value.
+
+        Args:
+            preds: Prediction array provided by the booster.
+            target: Label array provided by the booster.
+
+        Returns:
+            float: Metric value for the current split.
+        """
+        if len(preds) == self.eval_size:
+            value = self.values[min(self.index, len(self.values) - 1)]
+            self.index += 1
+            return float(value)
+        return rmse_metric(preds, target)
+
+
 def test_multioutputgbdt_smoke(tmp_path):
     rng = np.random.default_rng(0)
     inp_dim = 10
@@ -197,6 +256,183 @@ def test_singleoutputgbdt_falls_back_to_root_leaf_when_no_split_meets_min_sample
     loaded.close()
 
 
+def test_singleoutput_custom_objective_matches_builtin_mse():
+    rng = np.random.default_rng(7)
+    x_train = rng.random((96, 4)).astype("float64")
+    y_train = (1.7 * x_train[:, 0] - 0.4 * x_train[:, 1] + 0.2 * x_train[:, 2]).astype("float64")
+    params = {
+        "loss": b"mse",
+        "lr": 0.1,
+        "max_depth": 3,
+        "num_threads": 1,
+        "seed": 11,
+        "verbosity": Verbosity.SILENT,
+    }
+
+    built_in = SingleOutputGBDT(params=params)
+    built_in.set_data((x_train, y_train))
+    built_in.train(4)
+
+    custom = SingleOutputGBDT(params=params)
+    custom.set_data((x_train, y_train))
+    custom.train(4, objective=mse_objective)
+
+    np.testing.assert_allclose(custom.predict(x_train), built_in.predict(x_train))
+
+    built_in.close()
+    custom.close()
+
+
+def test_multioutput_custom_objective_matches_builtin_mse():
+    rng = np.random.default_rng(8)
+    x_train = rng.random((96, 4)).astype("float64")
+    y_train = np.column_stack(
+        [
+            1.2 * x_train[:, 0] - 0.5 * x_train[:, 1],
+            -0.7 * x_train[:, 2] + 0.9 * x_train[:, 3],
+        ]
+    ).astype("float64")
+    params = {
+        "loss": b"mse",
+        "lr": 0.1,
+        "max_depth": 3,
+        "num_threads": 1,
+        "seed": 13,
+        "verbosity": Verbosity.SILENT,
+    }
+
+    built_in = MultiOutputGBDT(out_dim=2, params=params)
+    built_in.set_data((x_train, y_train))
+    built_in.train(4)
+
+    custom = MultiOutputGBDT(out_dim=2, params=params)
+    custom.set_data((x_train, y_train))
+    custom.train(4, objective=mse_objective)
+
+    np.testing.assert_allclose(custom.predict(x_train), built_in.predict(x_train))
+
+    built_in.close()
+    custom.close()
+
+
+def test_singleoutput_manual_set_gh_accepts_1d_and_column_vector():
+    rng = np.random.default_rng(9)
+    x_train = rng.random((64, 3)).astype("float64")
+    y_train = rng.random(64).astype("float64")
+    params = {
+        "loss": b"mse",
+        "lr": 0.1,
+        "max_depth": 2,
+        "num_threads": 1,
+        "verbosity": Verbosity.SILENT,
+    }
+
+    booster = SingleOutputGBDT(params=params)
+    booster.set_data((x_train, y_train))
+
+    grad_1d = booster.preds_train.copy() - booster.label.copy()
+    hess_1d = np.ones_like(grad_1d)
+    booster._set_gh(grad_1d, hess_1d)
+    booster.boost()
+    preds_1d = booster.predict(x_train[:4])
+
+    booster.reset()
+
+    grad_2d = grad_1d.reshape(-1, 1)
+    hess_2d = hess_1d.reshape(-1, 1)
+    booster._set_gh(grad_2d, hess_2d)
+    booster.boost()
+    preds_2d = booster.predict(x_train[:4])
+
+    np.testing.assert_allclose(preds_1d, preds_2d)
+    booster.close()
+
+
+def test_custom_objective_rejects_invalid_shapes_and_dtypes():
+    rng = np.random.default_rng(10)
+    x_train = rng.random((48, 3)).astype("float64")
+    y_single = rng.random(48).astype("float64")
+    y_multi = rng.random((48, 2)).astype("float64")
+    params = {
+        "loss": b"mse",
+        "lr": 0.1,
+        "max_depth": 2,
+        "num_threads": 1,
+        "verbosity": Verbosity.SILENT,
+    }
+
+    single = SingleOutputGBDT(params=params)
+    single.set_data((x_train, y_single))
+    with pytest.raises(ValueError, match="shape"):
+        single.train(1, objective=invalid_single_shape_objective)
+
+    multi = MultiOutputGBDT(out_dim=2, params=params)
+    multi.set_data((x_train, y_multi))
+    with pytest.raises(ValueError, match="floating-point"):
+        multi.train(1, objective=invalid_integer_objective)
+
+    single.close()
+    multi.close()
+
+
+def test_custom_eval_metric_controls_verbosity_and_early_stopping(tmp_path, capfd):
+    rng = np.random.default_rng(11)
+    x_train = rng.random((96, 4)).astype("float64")
+    y_train = np.column_stack(
+        [
+            1.4 * x_train[:, 0] - 0.3 * x_train[:, 1],
+            0.8 * x_train[:, 2] + 0.2 * x_train[:, 3],
+        ]
+    ).astype("float64")
+    x_valid = rng.random((24, 4)).astype("float64")
+    y_valid = np.column_stack(
+        [
+            1.4 * x_valid[:, 0] - 0.3 * x_valid[:, 1],
+            0.8 * x_valid[:, 2] + 0.2 * x_valid[:, 3],
+        ]
+    ).astype("float64")
+    params = {
+        "loss": b"mse",
+        "lr": 0.1,
+        "max_depth": 3,
+        "num_threads": 1,
+        "seed": 17,
+        "early_stop": 1,
+        "verbosity": Verbosity.FULL,
+    }
+
+    booster = MultiOutputGBDT(out_dim=2, params=params)
+    booster.set_data((x_train, y_train), (x_valid, y_valid))
+    metric = EvalMetricSequence([3.0, 2.0, 2.5], eval_size=len(x_valid))
+    booster.train(5, objective=mse_objective, eval_metric=metric, maximize=False)
+
+    output = capfd.readouterr().out
+    assert "[0] train->" in output
+    assert "Best score 2.0 at round 1" in output
+
+    control = MultiOutputGBDT(
+        out_dim=2,
+        params={**params, "early_stop": 0, "verbosity": Verbosity.SILENT},
+    )
+    control.set_data((x_train, y_train), (x_valid, y_valid))
+    control.train(2, objective=mse_objective)
+
+    np.testing.assert_allclose(booster.predict(x_valid), control.predict(x_valid))
+
+    model_path = tmp_path / "custom_early_stop.txt"
+    booster.dump(model_path)
+    assert model_path.read_text().count("Booster[") == 2
+
+    loaded = MultiOutputGBDT(out_dim=2, params={**params, "verbosity": Verbosity.SILENT})
+    loaded.set_booster(x_train.shape[1], 2)
+    loaded.load(model_path)
+    np.testing.assert_allclose(loaded.predict(x_valid), control.predict(x_valid))
+
+    booster.close()
+    control.close()
+    loaded.close()
+
+
 def test_optional_sklearn_wrappers_are_lazy():
     import omnigbdt
 
@@ -263,6 +499,63 @@ def test_multioutput_sklearn_wrapper_smoke():
 
     model = MultiOutputGBDTRegressor(
         num_rounds=5,
+        max_depth=3,
+        num_threads=1,
+        verbosity=Verbosity.SILENT,
+    )
+    model.fit(x_train, y_train)
+    preds = model.predict(x_train[:8])
+
+    assert preds.shape == (8, y_train.shape[1])
+    assert np.isfinite(model.score(x_train, y_train))
+    model.close()
+
+
+def test_singleoutput_sklearn_wrapper_supports_custom_objective():
+    pytest.importorskip("sklearn")
+
+    from omnigbdt import SingleOutputGBDTRegressor
+
+    rng = np.random.default_rng(12)
+    x_train = rng.random((128, 4)).astype("float64")
+    y_train = (1.5 * x_train[:, 0] - 0.8 * x_train[:, 2]).astype("float64")
+
+    model = SingleOutputGBDTRegressor(
+        num_rounds=4,
+        objective=mse_objective,
+        eval_metric=rmse_metric,
+        maximize=False,
+        max_depth=3,
+        num_threads=1,
+        verbosity=Verbosity.SILENT,
+    )
+    model.fit(x_train, y_train)
+    preds = model.predict(x_train[:8])
+
+    assert preds.shape == (8,)
+    assert np.isfinite(model.score(x_train, y_train))
+    model.close()
+
+
+def test_multioutput_sklearn_wrapper_supports_custom_objective():
+    pytest.importorskip("sklearn")
+
+    from omnigbdt import MultiOutputGBDTRegressor
+
+    rng = np.random.default_rng(13)
+    x_train = rng.random((128, 4)).astype("float64")
+    y_train = np.column_stack(
+        [
+            x_train[:, 0] + x_train[:, 1],
+            x_train[:, 2] - x_train[:, 3],
+        ]
+    ).astype("float64")
+
+    model = MultiOutputGBDTRegressor(
+        num_rounds=4,
+        objective=mse_objective,
+        eval_metric=rmse_metric,
+        maximize=False,
         max_depth=3,
         num_threads=1,
         verbosity=Verbosity.SILENT,
