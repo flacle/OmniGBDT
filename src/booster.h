@@ -28,6 +28,12 @@ public:
 
     void set_gh(double *, double *);
 
+    void set_base_score(double *, int);
+
+    int base_score_size() const;
+
+    void get_base_scores(double *) const;
+
     void trim_trees(int);
 
     void set_data(uint16_t *, double *, double *, int, bool);
@@ -44,10 +50,13 @@ public:
 
     void load(const char *path) {
         trees.clear();
-        LoadTrees(trees, path);
+        LoadTrees(trees, hp.base_scores, path);
+        if (!hp.base_scores.empty()) {
+            hp.base_score = hp.base_scores[0];
+        }
     }
 
-    void dump(const char *path) { DumpTrees(trees, path); }
+    void dump(const char *path) { DumpTrees(trees, hp.base_scores, path); }
 
     virtual void update() = 0;
 
@@ -70,6 +79,8 @@ protected:
     HyperParameter hp;
     TopkDeque<CacheInfo> cache;
     Objective obj;
+
+    void init_preds(double *, int) const;
 };
 
 

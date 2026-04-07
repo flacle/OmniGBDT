@@ -256,6 +256,76 @@ def test_singleoutputgbdt_falls_back_to_root_leaf_when_no_split_meets_min_sample
     loaded.close()
 
 
+def test_singleoutput_auto_base_score_matches_training_mean_and_persists_dump(tmp_path):
+    """Ensure automatic single-output base-score initialization survives reload."""
+    rng = np.random.default_rng(5)
+    x_train = rng.random((32, 3)).astype("float64")
+    y_train = (2.0 * x_train[:, 0] - 0.5 * x_train[:, 1] + 2.5).astype("float64")
+    params = {
+        "loss": b"mse",
+        "num_threads": 1,
+        "verbosity": Verbosity.SILENT,
+    }
+
+    booster = SingleOutputGBDT(params=params)
+    booster.set_data((x_train, y_train))
+    expected = np.full(6, float(np.mean(y_train)), dtype=np.float64)
+    np.testing.assert_allclose(booster.predict(x_train[:6]), expected)
+
+    model_path = tmp_path / "single_auto_base_score.txt"
+    booster.dump(model_path)
+
+    loaded = SingleOutputGBDT(params=params)
+    loaded.set_booster(x_train.shape[1])
+    loaded.load(model_path)
+    np.testing.assert_allclose(loaded.predict(x_train[:6]), expected)
+
+    booster.close()
+    loaded.close()
+
+
+def test_multioutput_auto_and_explicit_base_scores_work_and_persist_dump(tmp_path):
+    """Ensure multi-output base-score vectors initialize and reload correctly."""
+    rng = np.random.default_rng(6)
+    x_train = rng.random((32, 3)).astype("float64")
+    y_train = np.column_stack(
+        [
+            2.0 * x_train[:, 0] + 0.25,
+            -1.5 * x_train[:, 1] + 0.75,
+        ]
+    ).astype("float64")
+    params = {
+        "loss": b"mse",
+        "num_threads": 1,
+        "verbosity": Verbosity.SILENT,
+    }
+
+    booster = MultiOutputGBDT(out_dim=2, params=params)
+    booster.set_data((x_train, y_train))
+    expected_auto = np.repeat(np.mean(y_train, axis=0, keepdims=True), 4, axis=0)
+    np.testing.assert_allclose(booster.predict(x_train[:4]), expected_auto)
+
+    model_path = tmp_path / "multi_auto_base_score.txt"
+    booster.dump(model_path)
+
+    loaded = MultiOutputGBDT(out_dim=2, params=params)
+    loaded.set_booster(x_train.shape[1], 2)
+    loaded.load(model_path)
+    np.testing.assert_allclose(loaded.predict(x_train[:4]), expected_auto)
+
+    explicit = MultiOutputGBDT(
+        out_dim=2,
+        params={**params, "base_score": np.array([0.2, 0.8], dtype=np.float64)},
+    )
+    explicit.set_data((x_train, y_train))
+    expected_explicit = np.repeat(np.array([[0.2, 0.8]], dtype=np.float64), 4, axis=0)
+    np.testing.assert_allclose(explicit.predict(x_train[:4]), expected_explicit)
+
+    booster.close()
+    loaded.close()
+    explicit.close()
+
+
 def test_singleoutput_custom_objective_matches_builtin_mse():
     rng = np.random.default_rng(7)
     x_train = rng.random((96, 4)).astype("float64")

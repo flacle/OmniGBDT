@@ -9,7 +9,7 @@ Common data requirements
 - feature arrays should be ``float64`` and two-dimensional with shape ``(n_samples, n_features)``
 - multi-output labels should be ``float64`` or ``int32`` and two-dimensional with shape ``(n_samples, out_dim)``
 - single-output labels should be contiguous ``float64`` or ``int32`` one-dimensional arrays
-- if you slice one column out of a 2D label matrix, use ``np.ascontiguousarray(...)`` before passing it to ``SingleOutputGBDT``
+- For slicing one column out of a 2D label matrix, use ``np.ascontiguousarray(...)`` before passing it to ``SingleOutputGBDT``
 
 Core models
 -----------
@@ -25,7 +25,9 @@ MultiOutputGBDT
    :param int out_dim: number of output columns
    :param dict params: training parameters; missing values fall back to defaults
 
-   ``MultiOutputGBDT`` is the main entry point when you want one model to learn multiple outputs jointly.
+   ``MultiOutputGBDT`` is the main entry point to learn multiple outputs jointly.
+
+   When ``params["base_score"]`` is left as ``None`` with ``loss=b"mse"``, the initial prediction is inferred from the training-label mean for each output column.
 
    .. method:: set_data(train_set=None, eval_set=None)
 
@@ -44,7 +46,7 @@ MultiOutputGBDT
       - when ``objective`` is provided, it must return ``(grad, hess)`` from the current prediction matrix and label matrix
       - for ``MultiOutputGBDT``, those callback arrays are 2D with shape ``(n_samples, out_dim)``
       - ``eval_metric`` may be used to report a scalar metric for the train and eval splits during custom-objective training
-      - if ``early_stop > 0`` on the custom-objective path, you must also provide ``eval_set``, ``eval_metric``, and ``maximize``
+      - if ``early_stop > 0`` and evaluation labels are registered on the custom-objective path, then ``eval_metric`` and ``maximize`` must also be provided
 
    .. method:: predict(x, num_trees=0)
 
@@ -92,7 +94,9 @@ SingleOutputGBDT
    :param int out_dim: output dimension used by prediction helpers; for the common single-target case, leave this at ``1``
    :param dict params: training parameters; missing values fall back to defaults
 
-   ``SingleOutputGBDT`` is most useful when you want one model per target column as a simple baseline.
+   ``SingleOutputGBDT`` can be used to train one model per target column as a simple baseline.
+
+   When ``params["base_score"]`` is left as ``None`` with ``loss=b"mse"``, the initial prediction is inferred from the training-label mean.
 
    .. method:: set_data(train_set=None, eval_set=None)
 
@@ -111,7 +115,7 @@ SingleOutputGBDT
       - when ``objective`` is provided, it must return ``(grad, hess)`` from the current prediction vector and label vector
       - for ``SingleOutputGBDT``, callback arrays are 1D with shape ``(n_samples,)``
       - the custom-objective path is only supported for the normal ``out_dim == 1`` workflow
-      - if ``early_stop > 0`` on the custom-objective path, you must also provide ``eval_set``, ``eval_metric``, and ``maximize``
+      - if ``early_stop > 0`` and evaluation labels are registered on the custom-objective path, then ``eval_metric`` and ``maximize`` must also be provided
 
    .. method:: predict(x, num_trees=0)
 
@@ -126,7 +130,7 @@ SingleOutputGBDT
 
    .. method:: reset()
 
-      Clear learned trees and reset predictions back to ``base_score``.
+      Clear learned trees and reset predictions back to the resolved base score.
 
    .. method:: close()
 

@@ -123,9 +123,15 @@ def _configure_library(lib):
     lib.SetData.argtypes = [c_void_p, array_2d_uint16, array_2d_double, array_2d_double, c_int, c_bool]
     lib.SetBin.argtypes = [c_void_p, array_1d_uint16, array_1d_double]
     lib.SetGH.argtypes = [c_void_p, POINTER(c_double), POINTER(c_double)]
+    lib.SetBaseScore.argtypes = [c_void_p, POINTER(c_double), c_int]
+    lib.GetBaseScoreSize.argtypes = [c_void_p]
+    lib.GetBaseScore.argtypes = [c_void_p, POINTER(c_double)]
     lib.SetData.restype = None
     lib.SetBin.restype = None
     lib.SetGH.restype = None
+    lib.SetBaseScore.restype = None
+    lib.GetBaseScoreSize.restype = c_int
+    lib.GetBaseScore.restype = None
 
     lib.Boost.argtypes = [c_void_p]
     lib.Train.argtypes = [c_void_p, c_int]
@@ -196,6 +202,14 @@ def _configure_library(lib):
 
 
 def load_lib(path=None):
+    """Load the OmniGBDT native library.
+
+    Args:
+        path: Optional explicit library path or containing directory.
+
+    Returns:
+        ctypes.CDLL: Configured native library handle.
+    """
     library_path = _resolve_library_path(path)
     cache_key = str(library_path)
     if cache_key in _LOADED_LIBRARIES:
@@ -211,22 +225,27 @@ def load_lib(path=None):
 
 
 def default_params():
+    """Return the default Python parameter mapping for OmniGBDT.
+
+    Returns:
+        dict[str, object]: Default parameter values for booster construction.
+    """
     return {
         "max_depth": 4,
         "max_leaves": 32,
-        "max_bins": 32,
+        "max_bins": 128,
         "topk": 0,
         "seed": 0,
         "num_threads": 2,
         "min_samples": 20,
         "subsample": 1.0,
-        "lr": 0.2,
-        "base_score": 0.0,
+        "lr": 0.05,
+        "base_score": None,
         "reg_l1": 0.0,
         "reg_l2": 1.0,
         "gamma": 1e-3,
         "loss": b"mse",
-        "early_stop": 0,
+        "early_stop": 15,
         "one_side": True,
         "verbosity": int(Verbosity.FULL),
         "verbose": True,

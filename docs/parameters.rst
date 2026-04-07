@@ -10,7 +10,7 @@ General
   - Supported values are ``b"mse"``, ``b"bce"``, ``b"ce"``, and ``b"ce_column"``
   - ``b"ce_column"`` is only relevant to legacy ``SingleOutputGBDT`` classification-style workflows
   - The Python API expects a byte string, for example ``b"mse"``
-  - when you train with ``objective=...``, the native booster still requires ``loss`` to be a supported built-in value at construction time, but custom rounds use your callback instead of the built-in objective
+  - when training with a custom ``objective=...``, the native booster still requires ``loss`` to be a supported built-in value at construction time, but custom rounds will use the custom callback instead of the built-in objective
 
 - ``verbosity``: default = ``Verbosity.FULL`` (``2``), type = ``Verbosity`` or int
   - ``Verbosity.SILENT`` / ``0`` prints nothing from the native trainer
@@ -32,7 +32,7 @@ General
 - ``hist_cache``: default = ``16``, type = int
   - Maximum number of histogram caches
 
-- ``max_bins``: default = ``32``, type = int
+- ``max_bins``: default = ``128``, type = int
   - Maximum number of bins for each input feature
 
 - ``topk``: default = ``0``, type = int
@@ -56,18 +56,20 @@ Tree
 - ``min_samples``: default = ``20``, type = int
   - Minimum number of samples allowed in a leaf
 
-- ``early_stop``: default = ``0``, type = int
+- ``early_stop``: default = ``15``, type = int
   - Early-stopping patience in rounds
-  - If ``0``, early stopping is disabled
+  - If no evaluation labels are registered, early stopping stays inactive
 
 Learning
 --------
 
-- ``lr``: default = ``0.2``, type = float
+- ``lr``: default = ``0.05``, type = float
   - Learning rate
 
-- ``base_score``: default = ``0.0``, type = float
-  - Initial prediction value
+- ``base_score``: default = ``None``, type = ``None`` | float | sequence of floats
+  - ``None`` enables automatic regression mean initialization
+  - ``SingleOutputGBDT`` resolves one scalar base score
+  - ``MultiOutputGBDT`` accepts either one scalar or one value per output column
 
 - ``reg_l1``: default = ``0.0``, type = float
   - L1 regularization term
@@ -101,7 +103,7 @@ Shape rules:
 
 Custom early stopping:
 
-- if ``early_stop > 0`` on the custom-objective path, you must also provide ``eval_set``, ``eval_metric``, and ``maximize``
+- if ``early_stop > 0`` and evaluation labels are registered on the custom-objective path, then ``eval_metric`` and ``maximize`` must also be provided
 - the protected ``_set_gh(...)`` plus ``boost()`` workflow remains available for advanced manual control
 
 Model-specific notes
@@ -109,5 +111,5 @@ Model-specific notes
 
 - ``MultiOutputGBDT`` expects multi-output labels shaped like ``(n_samples, out_dim)``
 - ``SingleOutputGBDT`` is best used with one target column at a time
-- if you want a simple multi-output baseline with ``SingleOutputGBDT``, train one model per target column and stack their predictions manually
+- for a comparison with a multi-output baseline using ``SingleOutputGBDT``, train one model per target column and stack their predictions manually
 - ``SingleOutputGBDT.train_multi(...)`` is a legacy helper for multi-class classification style workflows, not the common baseline path used in this fork's examples

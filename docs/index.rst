@@ -53,36 +53,65 @@ The optional sklearn wrappers are a fork-specific addition. They make it possibl
 Quick start
 -----------
 
-The example below shows the normal multi-output training flow:
+Install the UCI dataset helper used in the example below:
+
+.. code-block:: bash
+
+   pip install ucimlrepo
+
+The quick-start example uses the `UCI Machine Learning Repository Stock Portfolio Performance dataset <https://archive.ics.uci.edu/dataset/390/stock+portfolio+performance>`_ and shows the normal multi-output training flow on a real-world financial benchmark:
 
 .. code-block:: python
 
    import numpy as np
+   from ucimlrepo import fetch_ucirepo
    from omnigbdt import MultiOutputGBDT, Verbosity
 
-   rng = np.random.default_rng(0)
+   stock_portfolio = fetch_ucirepo(id=390)
+   frame = stock_portfolio.data.original
+   feature_columns = [
+       "Large B/P",
+       "Large ROE",
+       "Large S/P",
+       "Large Return Rate in the last quarter",
+       "Large Market Value",
+       "Small systematic Risk",
+   ]
+   target_columns = [
+       "Annual Return.1",
+       "Excess Return.1",
+       "Systematic Risk.1",
+       "Total Risk.1",
+       "Abs. Win Rate.1",
+       "Rel. Win Rate.1",
+   ]
+   X = frame.loc[:, feature_columns].to_numpy(dtype=np.float64)
+   Y = frame.loc[:, target_columns].to_numpy(dtype=np.float64)
 
-   X = rng.random((512, 4)).astype("float64")
-   shared_signal = (
-       1.5 * X[:, 0]
-       - 0.8 * X[:, 1]
-       + 0.4 * np.sin(np.pi * X[:, 2])
-   )
-   Y = np.column_stack([
-       1.2 * shared_signal + 0.3 * X[:, 2] * X[:, 3],
-       0.9 * shared_signal - 0.4 * X[:, 0] + 0.2 * X[:, 3],
-       1.1 * shared_signal + 0.5 * X[:, 1] * X[:, 3],
-   ]).astype("float64")
-   Y += 0.05 * rng.standard_normal(512)[:, None]
-   Y += 0.02 * rng.standard_normal((512, 3))
+   rng = np.random.default_rng(0)
+   indices = rng.permutation(len(X))
+   train_end = int(len(X) * 0.8)
+   train_idx = indices[:train_end]
+   test_idx = indices[train_end:]
+
+   X_train, Y_train = X[train_idx], Y[train_idx]
+   X_test = X[test_idx]
 
    model = MultiOutputGBDT(
        out_dim=Y.shape[1],
-       params={"loss": b"mse", "max_depth": 3, "lr": 0.1, "verbosity": Verbosity.SILENT},
+       params={
+           "loss": b"mse",
+           "max_depth": 4,
+           "max_bins": 128,
+           "lr": 0.05,
+           "early_stop": 15,
+           "num_threads": 1,
+           "verbosity": Verbosity.SILENT,
+       },
    )
-   model.set_data((X, Y))
-   model.train(1)
-   preds = model.predict(X[:5])
+   model.set_data((X_train, Y_train))
+   model.train(200)
+   preds = model.predict(X_test[:5])
    print(preds.shape)
 
 For a fuller example, a comparison with ``SingleOutputGBDT``, and an sklearn ``permutation_importance`` example, see :doc:`example`.

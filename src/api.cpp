@@ -14,6 +14,18 @@ OMNIGBDT_EXPORT void SetGH(BoosterUtils *foo, double *x, double *y) {
     return foo->set_gh(x, y);
 }
 
+OMNIGBDT_EXPORT void SetBaseScore(BoosterUtils *foo, double *x, int n) {
+    return foo->set_base_score(x, n);
+}
+
+OMNIGBDT_EXPORT int GetBaseScoreSize(BoosterUtils *foo) {
+    return foo->base_score_size();
+}
+
+OMNIGBDT_EXPORT void GetBaseScore(BoosterUtils *foo, double *x) {
+    return foo->get_base_scores(x);
+}
+
 OMNIGBDT_EXPORT void SetData(BoosterUtils *foo, uint16_t *maps, double *features, double *preds, int n, bool is_train) {
     return foo->set_data(maps, features, preds, n, is_train);
 }

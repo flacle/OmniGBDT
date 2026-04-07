@@ -26,8 +26,8 @@ void split(const std::string &str, std::vector<std::string> &result, const std::
 std::string zfill(const std::string &str, int width);
 
 //functions for dump and load the learned trees (to and from txt file)
-void DumpTrees(vector<Tree> &, const char *);
+void DumpTrees(vector<Tree> &, const vector<double> &, const char *);
 
-void LoadTrees(vector<Tree> &, const char *);
+void LoadTrees(vector<Tree> &, vector<double> &, const char *);
 
 #endif //MGBDT_IO_H

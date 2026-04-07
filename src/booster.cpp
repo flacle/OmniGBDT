@@ -24,6 +24,42 @@ void BoosterUtils::set_gh(double *x, double *y) {
     H = y;
 }
 
+void BoosterUtils::set_base_score(double *x, int n) {
+    if (x == nullptr || n <= 0) {
+        return;
+    }
+
+    if (hp.out_dim > 1 && n == 1) {
+        hp.base_scores.assign(hp.out_dim, x[0]);
+    } else {
+        hp.base_scores.assign(x, x + n);
+    }
+
+    if (!hp.base_scores.empty()) {
+        hp.base_score = hp.base_scores[0];
+    }
+}
+
+int BoosterUtils::base_score_size() const {
+    if (!hp.base_scores.empty()) {
+        return static_cast<int>(hp.base_scores.size());
+    }
+    return max(hp.out_dim, 1);
+}
+
+void BoosterUtils::get_base_scores(double *x) const {
+    if (x == nullptr) {
+        return;
+    }
+
+    if (!hp.base_scores.empty()) {
+        copy(hp.base_scores.begin(), hp.base_scores.end(), x);
+        return;
+    }
+
+    fill_n(x, base_score_size(), hp.base_score);
+}
+
 void BoosterUtils::trim_trees(int num_trees) {
     if (num_trees < 0) {
         num_trees = 0;
@@ -61,6 +97,21 @@ void BoosterUtils::set_label(double *x, bool is_train) {
 void BoosterUtils::set_label(int32_t *x, bool is_train) {
     if (is_train) { Train.Label_int32 = x; }
     else { Eval.Label_int32 = x; }
+}
+
+void BoosterUtils::init_preds(double *preds, int n) const {
+    if (preds == nullptr || n <= 0) {
+        return;
+    }
+
+    if (hp.out_dim <= 1 || hp.base_scores.size() <= 1) {
+        fill_n(preds, n * max(hp.out_dim, 1), hp.base_score);
+        return;
+    }
+
+    for (int i = 0; i < n; ++i) {
+        copy(hp.base_scores.begin(), hp.base_scores.end(), preds + i * hp.out_dim);
+    }
 }
 
 void BoosterUtils::rebuild_order(vector<int32_t> &order, vector<int32_t> &order_l, vector<int32_t> &order_r,
@@ -113,6 +164,7 @@ BoosterSingle::BoosterSingle(
     hp.reg_l2 = reg_l2;
     hp.gamma = gamma;
     hp.base_score = base_score;
+    hp.base_scores.assign(1, base_score);
     hp.early_stop = early_stop;
     hp.verbosity = max(0, min(verbosity, 2));
     hp.Max_caches = hist_cache;
@@ -125,8 +177,8 @@ BoosterSingle::BoosterSingle(
 
 void BoosterSingle::reset() {
     trees.clear();
-    if (Train.num > 0) { fill_n(Train.Preds, Train.num, hp.base_score); }
-    if (Eval.num > 0) { fill_n(Eval.Preds, Eval.num, hp.base_score); }
+    if (Train.num > 0) { init_preds(Train.Preds, Train.num); }
+    if (Eval.num > 0) { init_preds(Eval.Preds, Eval.num); }
 
 }
 
@@ -445,6 +497,7 @@ BoosterMulti::BoosterMulti(
     hp.reg_l2 = reg_l2;
     hp.gamma = gamma;
     hp.base_score = base_score;
+    hp.base_scores.assign(hp.out_dim, base_score);
     hp.early_stop = early_stop;
     hp.one_side = one_side;
     hp.verbosity = max(0, min(verbosity, 2));

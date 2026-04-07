@@ -69,6 +69,7 @@ struct HyperParameter {
     double max_delta = 10.0;
     unsigned int seed = 0;
     double base_score = 0.0f;
+    vector<double> base_scores;
     int topk = 0;
     int Max_caches = 16;
     int early_stop = 0;

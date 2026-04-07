@@ -6,49 +6,81 @@ This page contains short, self-contained examples for the packaged OmniGBDT fork
 - `GBDTMO <https://github.com/zzd1992/GBDTMO>`_
 - `GBDTMO-EX <https://github.com/zzd1992/GBDTMO-EX>`_
 
-Basic multi-output training
----------------------------
+UCI stock portfolio benchmark
+-----------------------------
+
+Install the UCI dataset helper first:
+
+.. code-block:: bash
+
+   pip install ucimlrepo
+
+The example below uses the `UCI Machine Learning Repository Stock Portfolio Performance dataset <https://archive.ics.uci.edu/dataset/390/stock+portfolio+performance>`_. It loads one real-world financial tabular benchmark and splits it into train, validation, and test partitions.
 
 .. code-block:: python
 
    import numpy as np
+   from ucimlrepo import fetch_ucirepo
    from omnigbdt import MultiOutputGBDT, Verbosity
 
-   rng = np.random.default_rng(0)
+   stock_portfolio = fetch_ucirepo(id=390)
+   frame = stock_portfolio.data.original
 
-   X = rng.random((512, 4)).astype("float64")
-   shared_signal = (
-       1.5 * X[:, 0]
-       - 0.8 * X[:, 1]
-       + 0.4 * np.sin(np.pi * X[:, 2])
-   )
-   Y = np.column_stack([
-       1.2 * shared_signal + 0.3 * X[:, 2] * X[:, 3],
-       0.9 * shared_signal - 0.4 * X[:, 0] + 0.2 * X[:, 3],
-       1.1 * shared_signal + 0.5 * X[:, 1] * X[:, 3],
-   ]).astype("float64")
-   Y += 0.05 * rng.standard_normal(512)[:, None]
-   Y += 0.02 * rng.standard_normal((512, 3))
+   feature_columns = [
+       "Large B/P",
+       "Large ROE",
+       "Large S/P",
+       "Large Return Rate in the last quarter",
+       "Large Market Value",
+       "Small systematic Risk",
+   ]
+   target_columns = [
+       "Annual Return.1",
+       "Excess Return.1",
+       "Systematic Risk.1",
+       "Total Risk.1",
+       "Abs. Win Rate.1",
+       "Rel. Win Rate.1",
+   ]
+
+   X = frame.loc[:, feature_columns].to_numpy(dtype=np.float64)
+   Y = frame.loc[:, target_columns].to_numpy(dtype=np.float64)
+
+   rng = np.random.default_rng(0)
+   indices = rng.permutation(len(X))
+   train_end = int(len(X) * 0.6)
+   valid_end = int(len(X) * 0.8)
+   train_idx = indices[:train_end]
+   valid_idx = indices[train_end:valid_end]
+   test_idx = indices[valid_end:]
+
+   X_train, Y_train = X[train_idx], Y[train_idx]
+   X_valid, Y_valid = X[valid_idx], Y[valid_idx]
+   X_test, Y_test = X[test_idx], Y[test_idx]
 
    params = {
        "loss": b"mse",
-       "max_depth": 3,
-       "lr": 0.1,
+       "max_depth": 4,
+       "max_bins": 128,
+       "lr": 0.05,
+       "early_stop": 15,
        "num_threads": 1,
        "verbosity": Verbosity.SILENT,
    }
 
    booster = MultiOutputGBDT(out_dim=Y.shape[1], params=params)
-   booster.set_data((X, Y))
-   booster.train(1)
+   booster.set_data((X_train, Y_train), (X_valid, Y_valid))
+   booster.train(200)
 
-   preds = booster.predict(X[:5])
+   preds = booster.predict(X_test[:5])
    print(preds.shape)
+
+The UCI export includes both formatted percentage columns and normalized numeric target columns. The example uses the normalized target columns from ``data.original``, which carry the ``.1`` suffix in the spreadsheet-derived column names. ``base_score`` remains unset, so regression training starts from the training-label mean automatically.
 
 Comparing ``SingleOutputGBDT`` and ``MultiOutputGBDT``
 ------------------------------------------------------
 
-One simple baseline is to train:
+Continuing from the UCI stock portfolio example above, one simple baseline is to train:
 
 - one ``MultiOutputGBDT`` model on the full target matrix
 - one ``SingleOutputGBDT`` model per target column
@@ -56,67 +88,31 @@ One simple baseline is to train:
 .. code-block:: python
 
    import numpy as np
-   from omnigbdt import SingleOutputGBDT, MultiOutputGBDT, Verbosity
+   from omnigbdt import SingleOutputGBDT
 
-   rng = np.random.default_rng(0)
-
-   n_samples = 512
-   n_features = 4
-   n_outputs = 3
-
-   X = rng.random((n_samples, n_features)).astype("float64")
-   shared_signal = (
-       1.5 * X[:, 0]
-       - 0.8 * X[:, 1]
-       + 0.4 * np.sin(np.pi * X[:, 2])
-   )
-   target_specific = np.column_stack([
-       0.3 * X[:, 2] * X[:, 3],
-       -0.4 * X[:, 0] + 0.2 * X[:, 3],
-       0.5 * X[:, 1] * X[:, 3],
-   ])
-   shared_noise = 0.05 * rng.standard_normal(n_samples)[:, None]
-   independent_noise = 0.02 * rng.standard_normal((n_samples, n_outputs))
-   Y = np.column_stack([
-       1.2 * shared_signal,
-       0.9 * shared_signal,
-       1.1 * shared_signal,
-   ]).astype("float64")
-   Y += target_specific + shared_noise + independent_noise
-
-   params = {
-       "loss": b"mse",
-       "max_depth": 3,
-       "lr": 0.1,
-       "num_threads": 1,
-       "verbosity": Verbosity.SILENT,
-   }
-
-   multi = MultiOutputGBDT(out_dim=n_outputs, params=params)
-   multi.set_data((X, Y))
-   multi.train(1)
-   multi_preds = multi.predict(X)
+   multi_preds = booster.predict(X_test)
 
    single_models = []
-   for col in range(n_outputs):
+   for col in range(Y.shape[1]):
        model = SingleOutputGBDT(params=params)
-       target = np.ascontiguousarray(Y[:, col])
-       model.set_data((X, target))
-       model.train(1)
+       target = np.ascontiguousarray(Y_train[:, col])
+       eval_target = np.ascontiguousarray(Y_valid[:, col])
+       model.set_data((X_train, target), (X_valid, eval_target))
+       model.train(200)
        single_models.append(model)
 
-   single_preds = np.column_stack([model.predict(X) for model in single_models])
+   single_preds = np.column_stack([model.predict(X_test) for model in single_models])
 
-   multi_rmse = np.sqrt(np.mean((multi_preds - Y) ** 2))
-   single_rmse = np.sqrt(np.mean((single_preds - Y) ** 2))
+   multi_rmse = np.sqrt(np.mean((multi_preds - Y_test) ** 2))
+   single_rmse = np.sqrt(np.mean((single_preds - Y_test) ** 2))
 
-   print("MultiOutputGBDT RMSE:", round(float(multi_rmse), 6))
-   print("SingleOutputGBDT-per-target RMSE:", round(float(single_rmse), 6))
+   print("Held-out RMSE from MultiOutputGBDT:", round(float(multi_rmse), 6))
+   print("Held-out RMSE from stacked SingleOutputGBDT models:", round(float(single_rmse), 6))
 
 Dumping and loading a model
 ---------------------------
 
-Continuing from the basic multi-output example above:
+Continuing from the UCI stock portfolio example above:
 
 .. code-block:: python
 
@@ -164,11 +160,12 @@ Custom loss
 
 ``MultiOutputGBDT`` supports public callback-based custom objectives through ``train(..., objective=...)``:
 
-Continuing from the basic multi-output example above:
+Continuing from the UCI stock portfolio example above:
 
 .. code-block:: python
 
    import numpy as np
+   from omnigbdt import MultiOutputGBDT, Verbosity
 
    def mse_objective(preds, target):
        return preds - target, np.ones_like(preds)
@@ -176,16 +173,29 @@ Continuing from the basic multi-output example above:
    def rmse_metric(preds, target):
        return float(np.sqrt(np.mean((preds - target) ** 2)))
 
+   booster = MultiOutputGBDT(
+       out_dim=Y_train.shape[1],
+       params={
+           "loss": b"mse",
+           "max_depth": 4,
+           "max_bins": 128,
+           "lr": 0.05,
+           "early_stop": 15,
+           "num_threads": 1,
+           "verbosity": Verbosity.FULL,
+       },
+   )
+   booster.set_data((X_train, Y_train), (X_valid, Y_valid))
    booster.train(
-       10,
+       200,
        objective=mse_objective,
        eval_metric=rmse_metric,
        maximize=False,
    )
 
-This uses your Python callback to supply gradients and Hessians round by round.
+This uses a Python callback to supply gradients and Hessians round by round.
 
-If you need manual control, the protected ``_set_gh(...)`` plus ``boost()`` workflow still exists as an advanced escape hatch:
+The protected ``_set_gh(...)`` plus ``boost()`` workflow still exists as an advanced escape hatch:
 
 .. code-block:: python
 
@@ -202,23 +212,27 @@ The sklearn-compatible wrappers forward the same callback arguments:
    from omnigbdt import MultiOutputGBDTRegressor
 
    model = MultiOutputGBDTRegressor(
-       num_rounds=10,
+       num_rounds=200,
        objective=mse_objective,
        eval_metric=rmse_metric,
        maximize=False,
-       max_depth=3,
+       max_depth=4,
+       max_bins=128,
+       lr=0.05,
+       early_stop=15,
        num_threads=1,
    )
-   model.fit(X, Y)
+   model.fit(X_train, Y_train)
 
 Permutation importance with sklearn
 -----------------------------------
 
-Install the optional sklearn extra first:
+Install the optional sklearn extra and the UCI dataset helper first:
 
 .. code-block:: bash
 
    pip install "omnigbdt[sklearn]"
+   pip install ucimlrepo
 
 Then use the sklearn-compatible wrapper with ``permutation_importance``:
 
@@ -226,35 +240,54 @@ Then use the sklearn-compatible wrapper with ``permutation_importance``:
 
    import numpy as np
    from sklearn.inspection import permutation_importance
+   from ucimlrepo import fetch_ucirepo
 
    from omnigbdt import MultiOutputGBDTRegressor
 
+   stock_portfolio = fetch_ucirepo(id=390)
+   frame = stock_portfolio.data.original
+   feature_columns = [
+       "Large B/P",
+       "Large ROE",
+       "Large S/P",
+       "Large Return Rate in the last quarter",
+       "Large Market Value",
+       "Small systematic Risk",
+   ]
+   target_columns = [
+       "Annual Return.1",
+       "Excess Return.1",
+       "Systematic Risk.1",
+       "Total Risk.1",
+       "Abs. Win Rate.1",
+       "Rel. Win Rate.1",
+   ]
+   X = frame.loc[:, feature_columns].to_numpy(dtype=np.float64)
+   Y = frame.loc[:, target_columns].to_numpy(dtype=np.float64)
+
    rng = np.random.default_rng(0)
-   X = rng.random((256, 4)).astype("float64")
-   shared_signal = (
-       1.2 * X[:, 0]
-       - 0.7 * X[:, 1]
-       + 0.3 * np.sin(np.pi * X[:, 2])
-   )
-   Y = np.column_stack([
-       1.1 * shared_signal + 0.2 * X[:, 3],
-       0.9 * shared_signal - 0.3 * X[:, 0],
-       1.0 * shared_signal + 0.4 * X[:, 1] * X[:, 3],
-   ]).astype("float64")
-   Y += 0.05 * rng.standard_normal(256)[:, None]
-   Y += 0.02 * rng.standard_normal((256, 3))
+   indices = rng.permutation(len(X))
+   train_end = int(len(X) * 0.8)
+   train_idx = indices[:train_end]
+   test_idx = indices[train_end:]
+
+   X_train, Y_train = X[train_idx], Y[train_idx]
+   X_test, Y_test = X[test_idx], Y[test_idx]
 
    model = MultiOutputGBDTRegressor(
-       num_rounds=10,
-       max_depth=3,
+       num_rounds=200,
+       max_depth=4,
+       max_bins=128,
+       lr=0.05,
+       early_stop=15,
        num_threads=1,
    )
-   model.fit(X, Y)
+   model.fit(X_train, Y_train)
 
    result = permutation_importance(
        model,
-       X,
-       Y,
+       X_test,
+       Y_test,
        scoring="r2",
        n_repeats=5,
        random_state=42,

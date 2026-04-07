@@ -131,23 +131,23 @@ class SingleOutputGBDTRegressor(_WrapperMixin, RegressorMixin, BaseEstimator):
     def __init__(
         self,
         *,
-        num_rounds=10,
+        num_rounds=200,
         loss=b"mse",
         objective=None,
         eval_metric=None,
         maximize=None,
         max_depth=4,
         max_leaves=32,
-        max_bins=32,
+        max_bins=128,
         seed=0,
         num_threads=2,
         min_samples=20,
-        lr=0.2,
-        base_score=0.0,
+        lr=0.05,
+        base_score=None,
         reg_l1=0.0,
         reg_l2=1.0,
         gamma=1e-3,
-        early_stop=0,
+        early_stop=15,
         verbosity=Verbosity.SILENT,
         hist_cache=16,
         lib=None,
@@ -167,7 +167,8 @@ class SingleOutputGBDTRegressor(_WrapperMixin, RegressorMixin, BaseEstimator):
             num_threads: Number of native threads.
             min_samples: Minimum rows in each leaf.
             lr: Learning rate.
-            base_score: Initial prediction value.
+            base_score: Initial prediction value. ``None`` enables automatic
+                regression mean initialization.
             reg_l1: L1 regularization.
             reg_l2: L2 regularization.
             gamma: Minimum split gain.
@@ -281,25 +282,25 @@ class MultiOutputGBDTRegressor(_WrapperMixin, RegressorMixin, BaseEstimator):
     def __init__(
         self,
         *,
-        num_rounds=10,
+        num_rounds=200,
         loss=b"mse",
         objective=None,
         eval_metric=None,
         maximize=None,
         max_depth=4,
         max_leaves=32,
-        max_bins=32,
+        max_bins=128,
         topk=0,
         one_side=True,
         seed=0,
         num_threads=2,
         min_samples=20,
-        lr=0.2,
-        base_score=0.0,
+        lr=0.05,
+        base_score=None,
         reg_l1=0.0,
         reg_l2=1.0,
         gamma=1e-3,
-        early_stop=0,
+        early_stop=15,
         verbosity=Verbosity.SILENT,
         hist_cache=16,
         lib=None,
@@ -321,7 +322,8 @@ class MultiOutputGBDTRegressor(_WrapperMixin, RegressorMixin, BaseEstimator):
             num_threads: Number of native threads.
             min_samples: Minimum rows in each leaf.
             lr: Learning rate.
-            base_score: Initial prediction value.
+            base_score: Initial prediction value. ``None`` enables automatic
+                regression mean initialization.
             reg_l1: L1 regularization.
             reg_l2: L2 regularization.
             gamma: Minimum split gain.

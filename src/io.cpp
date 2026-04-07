@@ -124,9 +124,19 @@ std::string zfill(const std::string &str, int width) {
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 
-void DumpTrees(vector<Tree> &trees, const char *path) {
+void DumpTrees(vector<Tree> &trees, const vector<double> &base_scores, const char *path) {
     ofstream outfile;
     outfile.open(path);
+    if (!base_scores.empty()) {
+        outfile << "BaseScore:";
+        for (size_t i = 0; i < base_scores.size(); ++i) {
+            if (i > 0) {
+                outfile << ",";
+            }
+            outfile << scientific << setprecision(PRECISION) << base_scores[i];
+        }
+        outfile << "\n";
+    }
     size_t t = 0;
     for (auto &tree : trees) {
         outfile << "Booster[" << t << "]:\n";
@@ -153,13 +163,28 @@ void DumpTrees(vector<Tree> &trees, const char *path) {
     outfile.close();
 }
 
-void LoadTrees(vector<Tree> &trees, const char *path) {
+void LoadTrees(vector<Tree> &trees, vector<double> &base_scores, const char *path) {
     ifstream infile(path);
     string line;
     vector<string> contents;
+    vector<double> loaded_base_scores;
+    bool has_base_scores = false;
     Tree tree_(false);
     int t = 0, num;
     while (getline(infile, line)) {
+        if (line.empty()) {
+            continue;
+        }
+        if (line.find("BaseScore:") == 0) {
+            contents.resize(0);
+            split(line.substr(10), contents, ",");
+            loaded_base_scores.resize(contents.size());
+            for (int i = 0; i < contents.size(); ++i) {
+                loaded_base_scores[i] = stod(contents[i]);
+            }
+            has_base_scores = true;
+            continue;
+        }
         //Booster
         if (line.find("Booster") == 0) {
             if (t > 0) {
@@ -192,6 +217,9 @@ void LoadTrees(vector<Tree> &trees, const char *path) {
     }
     if (!tree_.nonleaf.empty() || !tree_.leaf.empty()) {
         trees.push_back(tree_);
+    }
+    if (has_base_scores) {
+        base_scores = loaded_base_scores;
     }
     infile.close();
 }
