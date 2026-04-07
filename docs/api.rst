@@ -1,7 +1,7 @@
 Python API
 ==========
 
-This page summarizes the main Python entry points in OmniGBDT. Most users will work with ``MultiOutputGBDT`` or ``SingleOutputGBDT`` directly.
+This page summarizes the main Python entry points in OmniGBDT. For installation and runnable examples, see :doc:`install` and :doc:`example`.
 
 Common data requirements
 ------------------------
@@ -154,7 +154,7 @@ SingleOutputGBDTRegressor
 
    sklearn-compatible single-target regressor wrapper around ``SingleOutputGBDT``.
 
-   It exposes ``fit(...)``, ``predict(...)``, and ``score(...)`` so you can use it with tools such as ``sklearn.inspection.permutation_importance``.
+   It exposes ``fit(...)``, ``predict(...)``, and ``score(...)`` for use with tools such as ``sklearn.inspection.permutation_importance``.
 
    Its constructor also accepts ``objective=None``, ``eval_metric=None``, and ``maximize=None`` and forwards them to ``SingleOutputGBDT.train(...)``.
 

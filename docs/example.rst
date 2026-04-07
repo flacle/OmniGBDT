@@ -1,7 +1,9 @@
 Examples
 ========
 
-This page contains short, self-contained examples for the packaged OmniGBDT fork. For benchmark scripts and extended evaluation workflows, please see the upstream repositories:
+This page contains short, self-contained examples for the packaged OmniGBDT fork. The UCI stock portfolio benchmark is the main real-world tabular example used throughout the documentation. Installation details are available on :doc:`install`.
+
+For benchmark scripts and extended evaluation workflows, please see the upstream repositories:
 
 - `GBDTMO <https://github.com/zzd1992/GBDTMO>`_
 - `GBDTMO-EX <https://github.com/zzd1992/GBDTMO-EX>`_
@@ -155,8 +157,8 @@ Then render a dumped tree:
    graph = create_graph("omnigbdt_model.txt", tree_index=0, value_list=[0, 1])
    graph.render("tree_0", format="pdf")
 
-Custom loss
------------
+Custom objective
+----------------
 
 ``MultiOutputGBDT`` supports public callback-based custom objectives through ``train(..., objective=...)``:
 

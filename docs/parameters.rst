@@ -1,7 +1,7 @@
 Parameters
 ==========
 
-This page describes the Python parameter dictionary used by ``SingleOutputGBDT`` and ``MultiOutputGBDT`` in this fork. Unless noted otherwise, defaults come from ``omnigbdt.lib_utils.default_params()``.
+This page describes the Python parameter dictionary used by ``SingleOutputGBDT`` and ``MultiOutputGBDT`` in this fork. Unless noted otherwise, defaults come from ``omnigbdt.lib_utils.default_params()``. Several defaults intentionally differ from the original package; see :doc:`differences`.
 
 General
 -------
